@@ -8,7 +8,7 @@ import java.io.*;
 
 public class BlockNestedJoin extends Join {
     int batchsize;  //Number of tuples per out batch
-    
+
     /** The following fields are useful during execution of
      ** the NestedJoin operation
      **/
@@ -122,7 +122,7 @@ public class BlockNestedJoin extends Join {
             return null;
         }
         outbatch = new Batch(batchsize);
-
+        System.out.println("in block nested loop");
 
         while(!outbatch.isFull()){
 

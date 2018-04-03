@@ -117,17 +117,28 @@ public class QueryMain {
          execution plan
          **/
 
-        RandomOptimizer ro = new RandomOptimizer(sqlquery);
-        Operator logicalroot = ro.getOptimizedPlan();
-        if (logicalroot == null) {
+//        RandomOptimizer ro = new RandomOptimizer(sqlquery);
+//        Operator logicalroot = ro.getOptimizedPlan();
+//        if (logicalroot == null) {
+//            System.out.println("root is null");
+//            System.exit(1);
+//        }
+//
+//
+//        /** preparing the execution plan **/
+//
+//        Operator root = RandomOptimizer.makeExecPlan(logicalroot);
+
+        Operator root;
+        DynamicOptimizer dynamicOptimizer = new DynamicOptimizer(sqlquery);
+        Operator startingOp = dynamicOptimizer.getOptPlan();
+        if (startingOp == null) {
             System.out.println("root is null");
             System.exit(1);
         }
-
-
         /** preparing the execution plan **/
+        root = DynamicOptimizer.makeExecPlan(startingOp);
 
-        Operator root = RandomOptimizer.makeExecPlan(logicalroot);
 
 /** Print final Plan **/
         System.out.println("----------------------Execution Plan----------------");
