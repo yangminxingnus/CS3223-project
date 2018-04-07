@@ -183,6 +183,7 @@ public class RandomOptimizer {
             Join node = (Join) findNodeAt(root, joinNum);
             int prevJoinMeth = node.getJoinType();
             int joinMeth = RandNumb.randInt(0, numJMeth - 1);
+
             while (joinMeth == prevJoinMeth) {
                 joinMeth = RandNumb.randInt(0, numJMeth - 1);
             }
@@ -399,7 +400,6 @@ public class RandomOptimizer {
             int numbuff = BufferManager.getBuffersPerJoin();
             switch (joinType) {
                 case JoinType.NESTEDJOIN:
-
                     NestedJoin nj = new NestedJoin((Join) node);
                     nj.setLeft(left);
                     nj.setRight(right);
@@ -411,21 +411,20 @@ public class RandomOptimizer {
 
                 case JoinType.BLOCKNESTED:
 
-                    NestedJoin bj = new NestedJoin((Join) node);
-                    /* + other code */
+                    BlockNestedJoin bj = new BlockNestedJoin((Join) node);
+                    bj.setLeft(left);
+                    bj.setRight(right);
+                    bj.setNumBuff(numbuff);
                     return bj;
-
-                case JoinType.SORTMERGE:
-
-                    NestedJoin sm = new NestedJoin((Join) node);
-                    /* + other code */
-                    return sm;
 
                 case JoinType.HASHJOIN:
 
-                    NestedJoin hj = new NestedJoin((Join) node);
-                    /* + other code */
+                    HashJoin hj = new HashJoin((Join) node);
+                    hj.setLeft(left);
+                    hj.setRight(right);
+                    hj.setNumBuff(numbuff);
                     return hj;
+
                 default:
                     return node;
             }

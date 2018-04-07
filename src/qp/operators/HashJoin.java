@@ -32,6 +32,8 @@ public class HashJoin extends Join{
     int kcurs;
     boolean eosl;  // Whether end of stream (left table) is reached
     boolean eosr;  // End of stream (right table)
+    boolean isHashed;
+    boolean build;
 
     Hashtable<Integer, ArrayList<Tuple>> leftHash;
     Hashtable<Integer, ArrayList<Tuple>> rightHash;
@@ -74,6 +76,8 @@ public class HashJoin extends Join{
         rightHash = new Hashtable<>();
         probeHash = new Hashtable<>();
 
+        partitionKeys = new ArrayList<>();
+
         /** initialize the cursors of input buffers **/
 
         lcurs = 0; rcurs =0; kcurs = 0;
@@ -81,7 +85,10 @@ public class HashJoin extends Join{
         /** because right stream is to be repetitively scanned
          ** if it reached end, we have to start new scan
          **/
-        eosr=true;
+        eosr=false;
+        isHashed = false;
+        isHashed = false;
+        build = false;
 
         /** Right hand side table is to be materialized
          ** for the Nested join to perform
@@ -97,7 +104,7 @@ public class HashJoin extends Join{
 
             //if(right.getOpType() != OpType.SCAN){
             filenum++;
-            rfname = "NJtemp-" + String.valueOf(filenum);
+            rfname = "HJtemp-" + String.valueOf(filenum);
             try{
                 ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(rfname));
                 while( (rightpage = right.next()) != null){
@@ -130,82 +137,92 @@ public class HashJoin extends Join{
         //Debug.PPrint(con);
         //System.out.println();
         int i,j;
-        if(eosl){
+        if(isHashed){
             close();
             return null;
         }
 
         outbatch = new Batch(batchsize);
         /** partitioning phase: partition the left table into a hashtable **/
-        while(!eosl){
+        if(!eosl){
             /** new left page is to be fetched**/
             leftbatch =(Batch) left.next();
-            if(leftbatch==null){
-                eosl=true;
-            }
+            while(leftbatch!=null) {
             /** Whenever a new left page came , we hash each tuple
              **/
             for(i = 0; i < leftbatch.size(); i++) {
                 Tuple lefttuple = leftbatch.elementAt(i);
-                int hashValue = lefttuple.dataAt(leftindex).hashCode()%hash1;
-                if(leftHash.containsKey(hashValue)) {
+                int hashValue = lefttuple.dataAt(leftindex).hashCode() % hash1;
+                if (leftHash.containsKey(hashValue)) {
                     ArrayList<Tuple> tmp = leftHash.get(hashValue);
                     tmp.add(lefttuple);
                     leftHash.put(hashValue, tmp);
-                }
-                else{
+                } else {
                     ArrayList<Tuple> tmp = new ArrayList<>();
                     tmp.add(lefttuple);
                     leftHash.put(hashValue, tmp);
                     partitionKeys.add(hashValue);
                 }
             }
+            leftbatch = (Batch) left.next();
+            }
+            eosl = true;
         }
         /** partitioning phase: partition the right table into a hashtable **/
-        while(eosr==false){
+        if(!eosr){
             try{
-                if(rcurs==0 && lcurs==0){
+                in = new ObjectInputStream(new FileInputStream(rfname));
+                rightbatch = (Batch) in.readObject();
+                /** new right page is to be fetched**/
+                while(rightbatch!=null) {
+                    /** Whenever a new right page came , we hash each tuple
+                     **/
+                    for (i = 0; i < rightbatch.size(); i++) {
+                        Tuple righttuple = rightbatch.elementAt(i);
+                        int hashValue = righttuple.dataAt(rightindex).hashCode() % hash1;
+                        if (!rightHash.containsKey(hashValue)) {
+                            ArrayList<Tuple> tmp = new ArrayList<>();
+                            tmp.add(righttuple);
+                            rightHash.put(hashValue, tmp);
+                        } else {
+                            ArrayList<Tuple> tmp = rightHash.get(hashValue);
+                            tmp.add(righttuple);
+                            rightHash.put(hashValue, tmp);
+                        }
+                    }
                     rightbatch = (Batch) in.readObject();
                 }
-                /** new right page is to be fetched**/
-                rightbatch =(Batch) right.next();
-                if(rightbatch==null){
-                    eosr=true;
+                eosr = true;
+            } catch (EOFException e) {
+                try {
+                    in.close();
+                } catch (IOException io) {
+                    System.out.println("HashJoin:Error in temporary file reading");
                 }
-                /** Whenever a new right page came , we hash each tuple
-                 **/
-                for(i = 0; i < rightbatch.size(); i++) {
-                    Tuple righttuple = rightbatch.elementAt(i);
-                    int hashValue = righttuple.dataAt(leftindex).hashCode()%hash1;
-                    if(!rightHash.containsKey(hashValue)) {
-                        ArrayList<Tuple> tmp = new ArrayList<>();
-                        tmp.add(righttuple);
-                        rightHash.put(hashValue, tmp);
-                    }
-                    else{
-                        ArrayList<Tuple> tmp = rightHash.get(hashValue);
-                        tmp.add(righttuple);
-                        rightHash.put(hashValue, tmp);
-                    }
-                }
-            }catch(ClassNotFoundException c){
-                    System.out.println("HashJoin:Some error in deserialization ");
-                    System.exit(1);
+                eosr = true;
+            } catch (ClassNotFoundException c) {
+                System.out.println("HashJoin:Some error in deserialization ");
+                System.exit(1);
             }catch(IOException io){
                 System.out.println("HashJoin:temporary file reading error");
+                System.out.println(io.getMessage());
                 System.exit(1);
             }
         }
 
+
         /** joining/probing phase, join 2 hash tables **/
-        while(!outbatch.isFull()) {
+        while(!outbatch.isFull() && !isHashed) {
             for (i = kcurs; i < partitionKeys.size(); i++) {
                 int thisKey = partitionKeys.get(i);
-                probeHash.clear();
-                if (!rightHash.containsKey(thisKey)) continue;
+                if (!rightHash.containsKey(thisKey)) {
+                    kcurs ++;
+                    continue;
+                }
                 ArrayList<Tuple> curLeft = leftHash.get(thisKey);
 
-                if (probeHash.isEmpty()) {
+                if (!build) {
+                    probeHash.clear();
                     for (j = 0; j < curLeft.size(); j++) {
                         Tuple cur = curLeft.get(j);
                         int key = cur.dataAt(leftindex).hashCode() % hash2;
@@ -219,6 +236,7 @@ public class HashJoin extends Join{
                             probeHash.put(key, tmp);
                         }
                     }
+                    build = true;
                 }
                 ArrayList<Tuple> curRight = rightHash.get(thisKey);
                 for (j = rcurs; j < curRight.size(); j++) {
@@ -240,7 +258,7 @@ public class HashJoin extends Join{
                                             lcurs = 0;
                                             rcurs = 0;
                                             kcurs = i + 1;
-                                            probeHash.clear();
+                                            build = false;
                                         } else if (k == thisLeft.size() - 1 && j != curRight.size() - 1) {//case 3
                                             lcurs = 0;
                                             rcurs = j + 1;
@@ -259,9 +277,11 @@ public class HashJoin extends Join{
                     }
                 }
                 rcurs = 0;
+                kcurs = i + 1;
+                build = false;
             }
+            if (kcurs >= partitionKeys.size()) isHashed = true;
         }
-        kcurs=0;
         return outbatch;
     }
 

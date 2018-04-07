@@ -194,7 +194,12 @@ public class RandomInitialPlan {
             projectlist = new Vector();
 
         if (!projectlist.isEmpty()) {
-            root = new Project(base, projectlist, OpType.PROJECT);
+            if(sqlquery.isDistinct()) {
+                root = new Project(base, projectlist, OpType.PROJECT, true);
+            } else {
+                root = new Project(base, projectlist, OpType.PROJECT, false);
+            }
+
             Schema newSchema = base.getSchema().subSchema(projectlist);
             root.setSchema(newSchema);
         }

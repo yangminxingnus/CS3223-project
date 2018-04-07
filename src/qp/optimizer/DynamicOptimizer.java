@@ -5,7 +5,6 @@ import qp.utils.Attribute;
 import qp.utils.Condition;
 import qp.utils.SQLQuery;
 import qp.utils.Schema;
-
 import java.io.FileInputStream;
 import java.io.ObjectInputStream;
 import java.util.*;
@@ -83,7 +82,11 @@ public class DynamicOptimizer {
         Operator projectOp = null;
         Vector<Attribute> projectList = (Vector<Attribute>) sqlquery.getProjectList();
         if (projectList != null && !projectList.isEmpty()) {
-            projectOp = new Project(op, projectList, OpType.PROJECT);
+            if(sqlquery.isDistinct()) {
+                projectOp = new Project(op, projectList, OpType.PROJECT, true);
+            } else {
+                projectOp = new Project(op, projectList, OpType.PROJECT, false);
+            }
             Schema newSchema = op.getSchema().subSchema(projectList);
             projectOp.setSchema(newSchema);
             return projectOp;
@@ -108,15 +111,16 @@ public class DynamicOptimizer {
             lhsAttr = condition.getLhs();
             rhsAttr = (Attribute) condition.getRhs();
 
-            if ((leftTablesRoot.getSchema().contains(lhsAttr)
-                && (subsetSpace.elementAt(0).get(oneTable).getSchema().contains(rhsAttr)))) {
-                return (Condition) condition.clone();
-            } else if (leftTablesRoot.getSchema().contains(rhsAttr)
-                       && subsetSpace.elementAt(0).get(oneTable).getSchema().contains(lhsAttr)) {
+            if (leftTablesRoot.getSchema().contains(rhsAttr)
+                && subsetSpace.elementAt(0).get(oneTable).getSchema().contains(lhsAttr)
+                    ) {
                 result = (Condition) condition.clone();
                 result.setRhs((Attribute) lhsAttr.clone());
                 result.setLhs((Attribute) rhsAttr.clone());
                 return result;
+            } else if ((leftTablesRoot.getSchema().contains(lhsAttr)
+                    && (subsetSpace.elementAt(0).get(oneTable).getSchema().contains(rhsAttr)))) {
+                return (Condition) condition.clone();
             }
         }
         return null;
@@ -170,14 +174,6 @@ public class DynamicOptimizer {
                 type = 1;
 
                 //same as in the random optimizer
-//                joinOp.setJoinType(JoinType.BLOCKNESTED);
-//                pc = new PlanCost();
-//                curCost = pc.getCost(joinOp);
-//                if (curCost < planCost) {
-//                    planCost = curCost;
-//                    type = JoinType.BLOCKNESTED;
-//                }
-
                 joinOp.setJoinType(JoinType.NESTEDJOIN);
                 pc = new PlanCost();
                 curCost = pc.getCost(joinOp);
@@ -186,29 +182,21 @@ public class DynamicOptimizer {
                     type = JoinType.NESTEDJOIN;
                 }
 
-//                joinOp.setJoinType(JoinType.INDEXNESTED);
-//                pc = new PlanCost();
-//                curCost = pc.getCost(joinOp);
-//                if (curCost < planCost) {
-//                    planCost = curCost;
-//                    type = JoinType.INDEXNESTED;
-//                }
-//
-//                joinOp.setJoinType(JoinType.HASHJOIN);
-//                pc = new PlanCost();
-//                curCost = pc.getCost(joinOp);
-//                if (curCost < planCost) {
-//                    planCost = curCost;
-//                    type = JoinType.HASHJOIN;
-//                }
+                joinOp.setJoinType(JoinType.BLOCKNESTED);
+                pc = new PlanCost();
+                curCost = pc.getCost(joinOp);
+                if (curCost < planCost) {
+                    planCost = curCost;
+                    type = JoinType.BLOCKNESTED;
+                }
 
-//				joinOp.setJoinType(JoinType.SORTMERGE);
-//				pc = new PlanCost();
-//				curCost = pc.getCost(joinOp);
-//				if (curCost < planCost) {
-//					planCost = curCost;
-//					type = JoinType.SORTMERGE;
-//				}
+                joinOp.setJoinType(JoinType.HASHJOIN);
+                pc = new PlanCost();
+                curCost = pc.getCost(joinOp);
+                if (curCost < planCost) {
+                    planCost = curCost;
+                    type = JoinType.HASHJOIN;
+                }
 
                 joinOp.setJoinType(type);
 
@@ -291,60 +279,14 @@ public class DynamicOptimizer {
                     bj.setRight(right);
                     bj.setNumBuff(numbuff);
                     return bj;
-//
-//                case JoinType.INDEXNESTED:
-//
-//                    IndexNested in = new IndexNested((Join) node);
-//                    in.setLeft(left);
-//                    in.setRight(right);
-//                    in.setNumBuff(numbuff);
-//                    return in;
-//
-//                case JoinType.SORTMERGE:
-//
-//                    SortMergeJoin sm = new SortMergeJoin((Join) node);
-//                    sm.setLeft(left);
-//                    sm.setRight(right);
-//                    sm.setNumBuff(numbuff);
-//                    return sm;
-//
-//                case JoinType.HASHJOIN:
-//
-//                    HashJoin hj = new HashJoin((Join) node);
-//                    hj.setLeft(left);
-//                    hj.setRight(right);
-//                    hj.setNumBuff(numbuff);
-//                    return hj; case JoinType.BLOCKNESTED:
-//
-//                    BlockNested bj = new BlockNested((Join) node);
-//                    bj.setLeft(left);
-//                    bj.setRight(right);
-//                    bj.setNumBuff(numbuff);
-//                    return bj;
-//
-//                case JoinType.INDEXNESTED:
-//
-//                    IndexNested in = new IndexNested((Join) node);
-//                    in.setLeft(left);
-//                    in.setRight(right);
-//                    in.setNumBuff(numbuff);
-//                    return in;
-//
-//                case JoinType.SORTMERGE:
-//
-//                    SortMergeJoin sm = new SortMergeJoin((Join) node);
-//                    sm.setLeft(left);
-//                    sm.setRight(right);
-//                    sm.setNumBuff(numbuff);
-//                    return sm;
-//
-//                case JoinType.HASHJOIN:
-//
-//                    HashJoin hj = new HashJoin((Join) node);
-//                    hj.setLeft(left);
-//                    hj.setRight(right);
-//                    hj.setNumBuff(numbuff);
-//                    return hj;
+
+                case JoinType.HASHJOIN:
+
+                    HashJoin hj = new HashJoin((Join) node);
+                    hj.setLeft(left);
+                    hj.setRight(right);
+                    hj.setNumBuff(numbuff);
+                    return hj;
                 default:
                     return node;
             }
